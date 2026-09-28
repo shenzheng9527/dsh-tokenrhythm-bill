@@ -90,6 +90,45 @@
 - **插件更新**：自动比对 npm 最新版本（24 小时缓存），有新版时状态转高亮并提供「复制更新命令」，只提醒不自动执行
 - **备用粘贴**：网页会话 Cookie（`tr_session`）兜底登录（默认折叠，用的时候展开）
 
+## 提供商配置从哪读
+
+插件要显示模型、密钥、连通检测，得先从 DSH 里拿到「基元律动（tokenrhythm）」这个提供商的 `baseURL` 和 `apiKeyEnv`。DSH 把这份配置换过地方存，所以插件按优先级依次尝试：
+
+| 顺序 | 位置 | 对应 DSH |
+|------|------|----------|
+| 1 | `~/.dsh/settings.yaml` 的 `llm-pi-ai.providers` | 老版本（配置留在 harness home） |
+| 2 | `~/.dsh/profiles/<profile>/cordis.patch.yml` 里 `- id: llm-pi-ai` → `config.providers` | 新版本（首次启动一次性导入 profile 组合层） |
+| 3 | 其余 profile 的 `cordis.patch.yml`（按修改时间倒序） | 多 profile 机器兜底 |
+| 4 | `~/.dsh/settings.yaml.imported` | 已被改名存档的旧文件 |
+
+> **为什么需要第 2 步**：新版 DSH 首次启动会把 `settings.yaml` 导入同名条目然后把它改名成 `settings.yaml.imported`。只认 `settings.yaml` 的旧代码在这类机器上会读出一张空花名册，表现就是——入口胶囊照样显示余额（余额走的是本机保存的网页会话 Cookie，与配置文件无关），但模型页签永远「加载中」、状态页「已选 0/0」、密钥页提示「没有基元律动提供商」。**v0.5.10 起这条链路修好。**
+
+profile 的判定顺序：`DSH_PROFILE_DIR` 环境变量 → 插件自身安装路径里的 profile 名（就是加载它的那个）→ 其余按 patch 文件修改时间倒序。API Key 仍从 `~/.dsh/.credentials.yaml` 的 `refs:` 段或同名环境变量读取。
+
+## 隐藏阶跃星辰 / ZCode
+
+本机只用基元律动，所以这两个提供商的界面入口整体关掉：`lib/client.js` 顶部两个常量 `SHOW_STEP` / `SHOW_ZCODE` 置 `false`。关掉后不再有提供商切换段、不再有对应页签与设置分组、侧栏胶囊不会换成它们的身份，也不会发出任何 stepfun / zcode 请求（轮询都以 `provider` 为闸门）。
+
+**代码与 host 路由原样保留**——将来要恢复哪个，把对应常量改回 `true` 即可，不需要重新接线。
+
+### 本地开发安装（junction）与回滚
+
+本仓库可被直接挂进 profile 当开发版跑（插件自带 `detectInstallMode`，识别到 junction 指向本包就走 `local`，设置 → 关于里显示「本地开发模式」并抑制更新提示）：
+
+```powershell
+# 挂上（rmdir 只删链接，不会碰 store 里的原始副本）
+$link = "$HOME\.dsh\profiles\desktop\node_modules\dsh-tokenrhythm-bill"
+cmd /c rmdir "`"$link`""
+New-Item -ItemType Junction -Path $link -Target "D:\dev\dsh-tokenrhythm-bill"
+
+# 回滚到 npm 装的版本
+cmd /c rmdir "`"$link`""
+New-Item -ItemType Junction -Path $link `
+  -Target "$HOME\.dsh\profiles\desktop\node_modules\.pnpm\dsh-tokenrhythm-bill@0.5.8\node_modules\dsh-tokenrhythm-bill"
+```
+
+改完代码要**重启 DSH** 才生效——host 半边是常驻进程内的 JS，`patchReload: "live"` 只对 patch 里的配置生效，不会重载模块代码。改 client 半边刷新页面即可，host 改动必须重启。
+
 ## 安装说明
 
 任选以下一种方式安装，**安装后需重启 DSH**，侧栏底部才会出现入口。
@@ -128,3 +167,4 @@ dsh plugin --profile web add dsh-tokenrhythm-bill
 - **切换账号后数据变成 ¥0？** 余额、用量都按账号隔离——切到没用过的账号自然为空，切回原账号即恢复原数据。
 - **阶跃「账户」页签里另几个账号显示「—」？** 那是自动补齐还没跑到它（首次冷启动要依次给缺会话的账号登一次），或撞上了平台软频控被中止——底部会写清卡在哪个账号、还剩哪些。补齐完成后切走再切回仍是本地缓存命中，不必重查。
 - **余额显示「会话已过期」？** 到设置页重新登录，或重新粘贴 Cookie。
+- **左下角胶囊有余额，但模型页签一直「加载中」、状态页「已选 0/0」、密钥页说没有基元律动提供商？** 这是插件没找到 DSH 的提供商配置：胶囊的余额来自本机保存的网页会话，不需要配置文件；模型/密钥/检测要读 `llm-pi-ai` 的 `baseURL` 与 `apiKeyEnv`。**v0.5.10 之前**只读 `~/.dsh/settings.yaml`，而新版 DSH 早就把它导入 profile 的 `cordis.patch.yml` 并改名存档了，于是恒读空。v0.5.10 起按上表四个位置依次尝试。自查：`~/.dsh/profiles/desktop/cordis.patch.yml` 里应有 `- id: llm-pi-ai` 且其 `config.providers.tokenrhythm.baseURL` 指向 `https://tokenrhythm.studio/v1`。
