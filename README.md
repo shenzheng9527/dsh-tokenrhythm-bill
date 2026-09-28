@@ -111,21 +111,26 @@ profile 的判定顺序：`DSH_PROFILE_DIR` 环境变量 → 插件自身安装�
 
 **代码与 host 路由原样保留**——将来要恢复哪个，把对应常量改回 `true` 即可，不需要重新接线。
 
-### 本地开发安装（junction）与回滚
+### 安装源与回滚
 
-本仓库可被直接挂进 profile 当开发版跑（插件自带 `detectInstallMode`，识别到 junction 指向本包就走 `local`，设置 → 关于里显示「本地开发模式」并抑制更新提示）：
+profile 的 `package.json` 里这个依赖可以指向不同源：
 
 ```powershell
-# 挂上（rmdir 只删链接，不会碰 store 里的原始副本）
-$link = "$HOME\.dsh\profiles\desktop\node_modules\dsh-tokenrhythm-bill"
-cmd /c rmdir "`"$link`""
-New-Item -ItemType Junction -Path $link -Target "D:\dev\dsh-tokenrhythm-bill"
+cd "$HOME\.dsh\profiles\desktop"
 
-# 回滚到 npm 装的版本
-cmd /c rmdir "`"$link`""
-New-Item -ItemType Junction -Path $link `
-  -Target "$HOME\.dsh\profiles\desktop\node_modules\.pnpm\dsh-tokenrhythm-bill@0.5.8\node_modules\dsh-tokenrhythm-bill"
+# 从 GitHub 分支装（fork 的用法；#main 跟随分支更新）
+pnpm add "dsh-tokenrhythm-bill@github:<你的用户名>/dsh-tokenrhythm-bill#main"
+
+# 回滚到 npm 上的发布版
+pnpm add dsh-tokenrhythm-bill@0.5.8
 ```
+
+也可以直接把 `package.json` 里那一行改回版本号再 `pnpm install`。
+
+> 本地改代码调试时，可把 `node_modules\dsh-tokenrhythm-bill` 临时换成指向工作副本的 junction
+> （`cmd /c rmdir "<链接>"` 只删链接，不碰 store 里的原始副本），改一行代码不必重装。
+> 注意：Windows 上 pnpm 装出来的本来就是指向 `.pnpm` 的 junction，所以「本地开发模式」徽标
+> 在 pnpm 安装下也会显示——那是 `detectInstallMode` 的既有判定口径，不代表安装坏了。
 
 改完代码要**重启 DSH** 才生效——host 半边是常驻进程内的 JS，`patchReload: "live"` 只对 patch 里的配置生效，不会重载模块代码。改 client 半边刷新页面即可，host 改动必须重启。
 
